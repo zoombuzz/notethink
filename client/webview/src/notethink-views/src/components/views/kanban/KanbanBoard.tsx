@@ -18,6 +18,8 @@ import { useGroupBreadth } from "./useGroupBreadth";
 import { useBoardColumnStyle } from "./useColumnWidth";
 import { useGroupListHeight } from "./useGroupListHeight";
 import { groupNeedsVirtualization } from "./virtualCardSizingOps";
+import { useGroupBoardLines } from "../../../lib/boardlinehooks";
+import { BoardLineDemand, withBoardLines } from "../BoardLines";
 import GroupSeparator from "./GroupSeparator";
 import view_specific_styles from "../../ViewRenderer.module.scss";
 
@@ -70,6 +72,9 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
     }), [view.handlers?.click, view.handlers?.setCaretPosition, view.handlers?.postMessage, view.handlers?.descendToFolder, view.handlers?.setNoteExpanded]);
     // floored height to render; unfloored `available` drives the virtualize decision; undefined pre-measurement
     const { list_height, available: available_list_height } = useGroupListHeight(board_ref);
+    // the build and ship lines each group draws between its own cards, over memoised group lists
+    const group_notes = useMemo(() => visible_columns.map(column => column.child_notes ?? []), [visible_columns]);
+    const board_lines = useGroupBoardLines(group_notes, display_options.activity_doc_path as string | undefined);
     debug('rendering %d groups as %s', visible_columns.length, orientation ?? 'columns');
     return (
         <div
@@ -80,6 +85,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
             style={board.style}
             data-flip-root
         >
+            {board_lines.has_board && <BoardLineDemand post_message={view.handlers?.postMessage} />}
             <DragDropContext onDragEnd={onDragEnd} onDragStart={onDragStart}>
                 {visible_columns.map((column: KanbanColumnDescriptor, i: number) => (
                     <React.Fragment key={column.value}>
@@ -105,6 +111,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                             card_height={board.cardHeight}
                             card_widths={board.cardWidths}
                             list_height={list_height}
+                            line_slots={board_lines.slots[i]}
                         />
                     ) : (
                         <Droppable droppableId={`${column.seq}`}>
@@ -122,7 +129,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                         },
                                     }}
                                 >
-                                    {(column.child_notes || []).map((note: NoteProps, index: number) => renderBoardCard({
+                                    {withBoardLines((column.child_notes || []).map((note: NoteProps, index: number) => renderBoardCard({
                                         note,
                                         index,
                                         display_options,
@@ -131,7 +138,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                         dragDisabled,
                                         card_height: board.cardHeight,
                                         card_widths: board.cardWidths,
-                                    }))}
+                                    })), board_lines.slots[i])}
                                     {provided_drop.placeholder}
                                 </KanbanColumn>
                             )}

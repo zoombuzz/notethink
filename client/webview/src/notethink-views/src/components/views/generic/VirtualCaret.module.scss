@@ -5,12 +5,13 @@
     background: var(--vscode-editorCursor-foreground, currentColor);
     pointer-events: none;
     z-index: 1000;
-    animation: caretBlink 1.06s steps(1, end) infinite;
+    animation: caretPulse 1.06s ease-in-out infinite alternate;
 }
 
-@keyframes caretBlink {
-    0%, 50% { opacity: 1; }
-    50.01%, 100% { opacity: 0; }
+// fades rather than cuts, and never quite disappears, so the caret stays findable between pulses
+@keyframes caretPulse {
+    from { opacity: 1; }
+    to { opacity: 0.15; }
 }
 
 @media (prefers-reduced-motion: reduce) {

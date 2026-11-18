@@ -1513,18 +1513,23 @@ body.disableAddressBarHidingOnScroll {
   padding: 0;
   margin: 0.6em 0 0 0;
 
+  // one row per tag: the key column holds its place on the left and a long value runs off the card's right edge rather than wrapping under it
   .linetag {
+    display: flex;
+    align-items: baseline;
     margin: 0;
     font-size: 80%;
     list-style-type: none;
     .key {
-      display: inline-block;
-      width: 50%;
+      flex: 0 0 50%;
       // don't allow the values to be too far away from the keys
       max-width: 12em;
     }
     .value {
-
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
     }
 
     &.inherited {

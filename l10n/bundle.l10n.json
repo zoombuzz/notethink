@@ -255,5 +255,7 @@
   "Ask {0} to restart in {1}?": "Ask {0} to restart in {1}?",
   "That is not a vendor a coordinator can change to.": "That is not a vendor a coordinator can change to.",
   "Asked {0} to change vendor.": "Asked {0} to change vendor.",
-  "The vendor change could not be sent.": "The vendor change could not be sent."
+  "The vendor change could not be sent.": "The vendor change could not be sent.",
+  "Build line: the coordinator will build the stories above this line if left to run": "Build line: the coordinator will build the stories above this line if left to run",
+  "Ship line: the stories above this line have passed the release gate": "Ship line: the stories above this line have passed the release gate"
 }

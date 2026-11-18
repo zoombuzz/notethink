@@ -10,6 +10,8 @@ import type { ViewProps } from "../../../types/ViewProps";
 import type { NoteProps, NoteDisplayOptions, NoteHandlers } from "../../../types/NoteProps";
 import KanbanColumn from "./KanbanColumn";
 import { renderBoardCard } from "./renderKanbanCard";
+import BoardLines from "../BoardLines";
+import type { BoardLineSlots } from "../../../lib/boardlineops";
 import { useCardHeightCache } from "./useCardHeightCache";
 import { useGroupScrollOffset } from "./useGroupScrollOffset";
 import { registerVirtualGroup, unregisterVirtualGroup } from "../../../lib/virtualScrollRegistry";
@@ -29,6 +31,7 @@ export interface VirtualizedKanbanColumnProps {
     card_height: number | undefined;
     card_widths: Record<string, number>;
     list_height: number;
+    line_slots?: BoardLineSlots;
 }
 
 /** What every row reads via `itemData`; the row component stays module-scope so re-renders don't remount it. */
@@ -42,6 +45,7 @@ interface RowData {
     card_widths: Record<string, number>;
     reportMeasuredHeight: (stable_id: string, height: number, on_changed: () => void) => void;
     onRowResize: (index: number) => void;
+    line_slots: BoardLineSlots | undefined;
 }
 
 interface RowRenderProps {
@@ -75,8 +79,12 @@ function KanbanVirtualRow({ index, style, data }: RowRenderProps): ReactElement 
     }, [note, data, index]);
     // this row past the real notes IS dnd's placeholder slot; carries its own marker so tests can find it
     if (!note) { return <div style={style} className={view_specific_styles.virtualRow} data-testid="kanban-virtual-placeholder" />; }
+    // the lines before the first card and after each card overlay this row's edges, so they never change a row's solved height
+    const lines_before = index === 0 ? data.line_slots?.[0] : undefined;
+    const lines_after = data.line_slots?.[index + 1];
     return (
         <div style={style} className={view_specific_styles.virtualRow}>
+            {lines_before && <BoardLines kinds={lines_before} edge="before" />}
             <div ref={card_ref}>
                 {renderBoardCard({
                     note,
@@ -89,6 +97,7 @@ function KanbanVirtualRow({ index, style, data }: RowRenderProps): ReactElement 
                     card_widths: data.card_widths,
                 })}
             </div>
+            {lines_after && <BoardLines kinds={lines_after} edge="after" />}
         </div>
     );
 }
@@ -106,7 +115,7 @@ const MemoizedKanbanVirtualRow = React.memo(KanbanVirtualRow);
  */
 // eslint-disable-next-line max-lines-per-function -- tracked: function-decomposition-wave2
 export default function VirtualizedKanbanColumn(props: VirtualizedKanbanColumnProps): ReactElement {
-    const { view_id, column, display_options, view, handlers, dragDisabled, card_height, card_widths, list_height } = props;
+    const { view_id, column, display_options, view, handlers, dragDisabled, card_height, card_widths, list_height, line_slots } = props;
     const notes = column.child_notes ?? [];
     // stable_id (falling back to seq) - the same key the scroll-to-focus registry uses to find a card
     const stable_ids = useMemo(() => notes.map(n => kanbanDraggableId(n)), [notes]);
@@ -119,8 +128,8 @@ export default function VirtualizedKanbanColumn(props: VirtualizedKanbanColumnPr
     const item_size = useCallback((index: number) => getRowSize(stable_ids, index), [getRowSize, stable_ids]);
     const item_key = useCallback((index: number) => stable_ids[index] ?? `placeholder-${index}`, [stable_ids]);
     const item_data: RowData = useMemo(() => ({
-        notes, display_options, view, handlers, dragDisabled, card_height, card_widths, reportMeasuredHeight, onRowResize,
-    }), [notes, display_options, view, handlers, dragDisabled, card_height, card_widths, reportMeasuredHeight, onRowResize]);
+        notes, display_options, view, handlers, dragDisabled, card_height, card_widths, reportMeasuredHeight, onRowResize, line_slots,
+    }), [notes, display_options, view, handlers, dragDisabled, card_height, card_widths, reportMeasuredHeight, onRowResize, line_slots]);
     // measurement_tick forces recompute on a real height landing; its value itself is unused
     const content_height = useMemo(() => {
         const row_sizes = Array.from({ length: stable_ids.length }, (_, index) => item_size(index));

@@ -18,7 +18,7 @@ import {
 import { writeToErrorLog, writeToLog, writeToLogAtLevel } from '../lib/errorops';
 import { coordinatorsFrom, boardDocFor } from '../lib/coordinatorops';
 import { REGISTRY_FILE_MAX_BYTES, REGISTRY_MAX_AGENTS, overlayRegistry, parseRegistryEntry, registryEntrySegments, REGISTRY_DIR_SEGMENTS, type ResolvedRegistryAgent } from '../lib/agentregistryops';
-import { PROGRESS_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, progressFileSegments, progressForRepository, progressProjectName } from '../lib/progressfileops';
+import { PROGRESS_FILE_MAX_BYTES, READY_FILE_MAX_BYTES, THINKERSYNC_HOME_SEGMENTS, parseProgressFile, parseReadyFile, progressFileSegments, progressForRepository, progressProjectName, readyFileSegments } from '../lib/progressfileops';
 import { attributeCommitsToSessions, attributeFilesToSessions, type AgentCommitCall, type AgentWriteCall } from '../lib/agentgitattributionops';
 import { lineDiffFromBytes, type LineDiffCounts } from '../lib/agentlinediffops';
 import { parseScanCache, scanCacheFileNameFor, serialiseScanCache, type AgentFileIdentity } from '../lib/agentscancacheops';
@@ -804,6 +804,7 @@ export class AgentAnalyser {
             timed(() => this.readRepositoryTrees(now_ms)),
         ]);
         const progress = await this.readProgress(vendor_home, reads);
+        const ready_by_repo = await this.readReady(vendor_home, reads);
         const registry_agents = await this.readRegistry(vendor_home, reads);
         const candidates = this.orderCandidates(discovered, reads);
         // a scan with nothing to read still makes one round trip (carrying pending evictions), so a worker failure is still caught
@@ -864,7 +865,7 @@ export class AgentAnalyser {
                 this.sessions = this.withRegistry(sessions_acc, registry_agents, progress, story_docs, now_ms);
                 this.trees = trees_this_batch;
                 this.progress = progress;
-                this.setCoordinators(registry_agents, story_docs);
+                this.setCoordinators(registry_agents, story_docs, ready_by_repo);
                 this.state = emptyAnalyserState(is_last_batch ? 'live' : 'scanning');
                 this.state.refusals = refusals;
                 if (!is_last_batch) { this.noteScanProgress(this.state, batches.slice(batch_index + 1).flat(), reused.length + candidates_done, sessions_found, reads); }
@@ -1778,8 +1779,8 @@ export class AgentAnalyser {
     }
 
     // the coordinator rows for this scan's registry agents, each placed on the board its repository keeps
-    private setCoordinators(agents: ResolvedRegistryAgent[], story_docs: StoryDocument[]): void {
-        this.coordinators = coordinatorsFrom(agents, story_docs);
+    private setCoordinators(agents: ResolvedRegistryAgent[], story_docs: StoryDocument[], ready_by_repo: Map<string, string[]>): void {
+        this.coordinators = coordinatorsFrom(agents, story_docs, ready_by_repo);
         this.coordinator_board_paths = new Map();
         for (const coordinator of this.coordinators) {
             const abs_path = boardDocFor(story_docs, coordinator.root_relative)?.abs_path;
@@ -1812,6 +1813,25 @@ export class AgentAnalyser {
             const bytes = await this.readBytes(file_uri);
             if (!bytes || bytes.length > PROGRESS_FILE_MAX_BYTES) { continue; }
             found.push(...progressForRepository(parseProgressFile(new TextDecoder().decode(bytes)), read.root_relative));
+        }
+        return found;
+    }
+
+    /**
+     * Each open repository's ready story ids, read-only, from the ready file beside its progress file,
+     * keyed by the repository's workspace-relative path. A repository outside the workspace folders, and
+     * a missing, oversize, unreadable or malformed file, contribute nothing.
+     */
+    private async readReady(vendor_home: ResolvedAgentVendorHome, reads: HashMapOf<RepositoryRead>): Promise<Map<string, string[]>> {
+        const found = new Map<string, string[]>();
+        for (const [root_path, read] of Object.entries(reads)) {
+            if (this.workspaceRelative(root_path) === undefined) { continue; }
+            const project = progressProjectName(root_path);
+            if (!project) { continue; }
+            const bytes = await this.readBytes(vscode.Uri.joinPath(vendor_home.home, ...THINKERSYNC_HOME_SEGMENTS, ...readyFileSegments(project)));
+            if (!bytes || bytes.length > READY_FILE_MAX_BYTES) { continue; }
+            const ids = parseReadyFile(new TextDecoder().decode(bytes));
+            if (ids.length > 0) { found.set(read.root_relative, ids); }
         }
         return found;
     }

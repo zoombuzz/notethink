@@ -1,5 +1,7 @@
 import type { ReactElement } from "react";
 import { renderBodyItems } from "../../../lib/renderops";
+import { hasBoardStories } from "../../../lib/boardlineops";
+import { BoardLinedBodyItems } from "../../views/BoardLines";
 import { bodyClickPosition, createNoteClickHandler } from "../../../lib/noteui";
 import type { NoteProps } from "../../../types/NoteProps";
 import view_specific_styles from "../../../components/ViewRenderer.module.scss";
@@ -34,7 +36,9 @@ export default function MarkdownNoteBody(props: MarkdownNoteBodyProps): ReactEle
                  onClick={createNoteClickHandler(note, bodyClickPosition(note))}
                  style={clip_style}
             >
-                {renderBodyItems(note, note.children_body)}
+                {hasBoardStories(note.children_body as NoteProps[], note.display_options?.activity_doc_path as string | undefined)
+                    ? <BoardLinedBodyItems note={note} />
+                    : renderBodyItems(note, note.children_body)}
             </div>
             {should_clip && scrolled_top > 0 && (
                 <div className={view_specific_styles.abridgeFadeTop}>

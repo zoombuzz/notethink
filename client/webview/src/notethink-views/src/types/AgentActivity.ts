@@ -386,6 +386,8 @@ export interface ActivityCoordinatorStory {
  * - board_doc_path: workspace-relative path of the `todo.md` the target line is drawn on; absent when the repository has none
  * - board_stories: that board's stories, top to bottom
  * - marker_after: how many stories sit at or above the lowest story carrying this host's `coord=` marker, 0 when none carries it
+ * - build_after: how many stories sit at or above the last story the coordinator will build if left to run, 0 when there is none
+ * - ship_after: how many stories sit at or above the last story that has passed the release gate, 0 when there is none
  */
 export interface ActivityCoordinator {
     agent: string;
@@ -399,6 +401,8 @@ export interface ActivityCoordinator {
     board_doc_path?: string;
     board_stories: ActivityCoordinatorStory[];
     marker_after: number;
+    build_after: number;
+    ship_after: number;
 }
 
 // why a session's own files could not be read; a caller asserts and branches on the code and logs the reason

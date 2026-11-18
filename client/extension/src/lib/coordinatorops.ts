@@ -46,15 +46,29 @@ export const ENVELOPE_VERSION = 0;
 const STORY_HEADING = /^### (.*)$/;
 const LINETAG_PATTERN = /\[\]\(\?([^)]*)\)/g;
 const OPEN_TASK = /^\s*[+*-]\s+\[ \]/;
+const OPEN_QUESTION_LINE = /^\s*\+ open question(\s*\([^)]*\))?:/;
+const BLOCKED_NOTE_LINE = /^\s*\+ blocked\b[^:]*:/;
+
+// the id prefix of a story another repository's coordinator delegated to this board
+const DELEGATED_ID_PREFIX = 'delegated-';
+
+// statuses that wait on the operator, so a coordinator does not pick them up, and that have passed the release gate
+const REVIEW_STATUSES = ['code-review', 'testing'];
 
 /**
  * One story of a board as the target line sees it, with where its heading sits.
  * - markers: the hosts named by the heading's `coord` linetag
  * - line_start: offset of the heading line's first character
  * - line: the heading line itself
+ * - sent: whether the heading carries a `sent` linetag, which a coordinator's envelope writes when it hands the story over
+ * - open_question: whether the story holds an unanswered `+ open question` line
+ * - blocked: whether the story holds a `+ blocked` note
  */
 export interface BoardStory extends ActivityCoordinatorStory {
     markers: string[];
+    sent: boolean;
+    open_question: boolean;
+    blocked: boolean;
     line_start: number;
     line: string;
 }
@@ -170,18 +184,59 @@ export function parseBoardStories(text: string): BoardStory[] {
                 convoys: [],
                 operator_steps: [],
                 markers: markerHosts(params.coord),
+                sent: params.sent !== undefined,
+                open_question: false,
+                blocked: false,
                 line_start: offset,
                 line,
             };
             stories.push(current);
-        } else if (current && OPEN_TASK.test(line)) {
-            const params = linetagParams(line);
-            if (params.delegate) { current.convoys.push(clip(params.delegate)); }
-            if (params.work === 'manual') { current.operator_steps.push(taskText(line)); }
+        } else if (current) {
+            if (OPEN_TASK.test(line)) {
+                const params = linetagParams(line);
+                if (params.delegate) { current.convoys.push(clip(params.delegate)); }
+                if (params.work === 'manual') { current.operator_steps.push(taskText(line)); }
+            } else if (OPEN_QUESTION_LINE.test(line)) {
+                current.open_question = true;
+            } else if (BLOCKED_NOTE_LINE.test(line)) {
+                current.blocked = true;
+            }
         }
         offset += line.length + 1;
     }
     return stories;
+}
+
+/**
+ * Whether a coordinator left to run would build this story: it was handed over (a `sent` linetag), is a
+ * delegated story (a `delegated-` id) or is at `doing`, and is not waiting on the operator or the gate.
+ * A story at `code-review` or `testing`, one parked on an open question or a blocked note, and one with
+ * an open manual task or an open delegated task are all left out.
+ */
+export function isBuildable(story: Pick<BoardStory, 'id' | 'status' | 'sent' | 'open_question' | 'blocked' | 'convoys' | 'operator_steps'>): boolean {
+    if (REVIEW_STATUSES.includes(story.status)) { return false; }
+    if (story.open_question || story.blocked || story.operator_steps.length > 0 || story.convoys.length > 0) { return false; }
+    return story.sent || story.id.startsWith(DELEGATED_ID_PREFIX) || story.status === 'doing';
+}
+
+/** whether a story has passed the release gate: the coordinator's ready file names it, or it sits at `code-review` or `testing` */
+export function isShippable(story: Pick<BoardStory, 'id' | 'status'>, ready_ids: ReadonlyArray<string>): boolean {
+    return REVIEW_STATUSES.includes(story.status) || ready_ids.includes(story.id);
+}
+
+/**
+ * How many stories sit at or above the last story each line marks, 0 when a line marks none. The build
+ * line is the last buildable story, the ship line the last shippable one, whichever way the board is
+ * ordered between them.
+ */
+export function boardLinePositions(stories: ReadonlyArray<BoardStory>, ready_ids: ReadonlyArray<string>): { build_after: number; ship_after: number } {
+    let build_after = 0;
+    let ship_after = 0;
+    stories.forEach((story, index) => {
+        if (isBuildable(story)) { build_after = index + 1; }
+        if (isShippable(story, ready_ids)) { ship_after = index + 1; }
+    });
+    return { build_after, ship_after };
 }
 
 /** how many stories sit at or above the lowest story carrying this host's marker, 0 when none carries it */
@@ -239,15 +294,18 @@ export function boardDocFor(story_docs: ReadonlyArray<StoryDocument>, repo_relat
 /**
  * The coordinator rows for the registry entries placed in the open folder, in name order. An entry that
  * is not a coordinator, or whose name or machine is not safe to address, is left out. Each row carries
- * its repository's board stories, so the target line can be drawn without another read.
+ * its repository's board stories, so the target line can be drawn without another read, and where the
+ * build and ship lines fall on them; `ready_by_repo` holds each repository's ready story ids, keyed by
+ * the repository's workspace-relative path.
  */
-export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, story_docs: ReadonlyArray<StoryDocument>): ActivityCoordinator[] {
+export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, story_docs: ReadonlyArray<StoryDocument>, ready_by_repo: ReadonlyMap<string, ReadonlyArray<string>> = new Map()): ActivityCoordinator[] {
     const rows: ActivityCoordinator[] = [];
     for (const agent of agents) {
         const machine = agent.machine ?? '';
         if (!isCoordinatorEntry(agent) || !isSafeCoordinatorName(agent.agent) || !isSafeCoordinatorName(machine)) { continue; }
         const board = boardDocFor(story_docs, agent.repo_relative);
         const stories = board ? parseBoardStories(board.text) : [];
+        const lines = boardLinePositions(stories, ready_by_repo.get(agent.repo_relative) ?? []);
         rows.push({
             agent: agent.agent,
             vendor: agent.vendor,
@@ -260,6 +318,8 @@ export function coordinatorsFrom(agents: ReadonlyArray<ResolvedRegistryAgent>, s
             board_doc_path: board?.doc_path,
             board_stories: stories.slice(0, COORDINATOR_BOARD_MAX_STORIES).map(({ id, title, status, convoys, operator_steps }) => ({ id, title, status, convoys, operator_steps })),
             marker_after: markerAfter(stories, machine),
+            build_after: lines.build_after,
+            ship_after: lines.ship_after,
         });
     }
     return rows.sort((a, b) => (a.agent < b.agent ? -1 : a.agent > b.agent ? 1 : 0));

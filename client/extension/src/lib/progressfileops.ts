@@ -63,3 +63,30 @@ export function parseProgressFile(text: string): ProgressFileEntry[] {
 export function progressForRepository(entries: ReadonlyArray<ProgressFileEntry>, root_relative: string): ActivityStoryProgress[] {
     return entries.map(entry => ({ root_relative, ...entry }));
 }
+
+// a ready file names a handful of story slugs; anything larger is not one and is left unread
+export const READY_FILE_MAX_BYTES = 256 * 1024;
+
+// the most stories one ready file contributes, so a runaway writer cannot bloat every activity post
+export const READY_STORIES_MAX = 300;
+
+/** the path segments of a project's ready file below the thinkersync home, beside its progress file */
+export function readyFileSegments(project: string): string[] {
+    return ['coordinator', project, 'ready.json'];
+}
+
+/**
+ * The story slugs a ready file names: the `stories` array of its top-level object, which records the
+ * stories the release gate last passed. A missing, empty or malformed file, a file with no `stories`
+ * array and any entry that is not a non-empty string all give nothing for that part, so a bad file
+ * means no ready stories rather than an error.
+ */
+export function parseReadyFile(text: string): string[] {
+    let parsed: unknown;
+    try { parsed = JSON.parse(text); }
+    catch { return []; }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) { return []; }
+    const stories = (parsed as { stories?: unknown }).stories;
+    if (!Array.isArray(stories)) { return []; }
+    return stories.filter((slug): slug is string => typeof slug === 'string' && slug.length > 0).slice(0, READY_STORIES_MAX);
+}

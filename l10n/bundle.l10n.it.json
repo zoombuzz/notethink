@@ -255,5 +255,7 @@
   "Ask {0} to restart in {1}?": "Chiedere a {0} di riavviarsi con {1}?",
   "That is not a vendor a coordinator can change to.": "Un coordinatore non può passare a quel fornitore.",
   "Asked {0} to change vendor.": "È stato chiesto a {0} di cambiare fornitore.",
-  "The vendor change could not be sent.": "Non è stato possibile inviare il cambio di fornitore."
+  "The vendor change could not be sent.": "Non è stato possibile inviare il cambio di fornitore.",
+  "Build line: the coordinator will build the stories above this line if left to run": "Linea di costruzione: il coordinatore costruirà le storie sopra questa linea se lasciato in esecuzione",
+  "Ship line: the stories above this line have passed the release gate": "Linea di rilascio: le storie sopra questa linea hanno superato il controllo di rilascio"
 }

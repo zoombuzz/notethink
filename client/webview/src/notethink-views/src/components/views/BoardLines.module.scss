@@ -1,0 +1,74 @@
+/*
+ * The build and ship lines. Both are drawn in the highlight colour the focus ring uses: the build line
+ * solid, the ship line dashed. A line has no height of its own beyond its stroke, and a pseudo-element
+ * widens the hover target so the tooltip is reachable.
+ */
+
+.boardLines {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0;
+}
+
+.boardLine {
+  position: relative;
+  height: 0;
+  border-top: 2px solid var(--vscode-focusBorder);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: -5px 0;
+  }
+
+  &.ship {
+    border-top-style: dashed;
+  }
+}
+
+// a windowed group places its rows by solved offsets, so its lines overlay the row edge and take no room
+.edgeBefore,
+.edgeAfter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0;
+  z-index: 1;
+}
+
+.edgeBefore {
+  top: -8px;
+}
+
+.edgeAfter {
+  bottom: 9px;
+}
+
+// a stacked group lays its cards along a row, so a line standing between two of them is vertical
+:global([data-orientation='rows']) .boardLines {
+  // beats the board's own sizing of every direct child of a row of cards, which is deeper than a single class
+  flex: 0 0 auto !important;
+  flex-direction: row;
+  align-self: stretch;
+  width: auto;
+  margin: 0 2px;
+}
+
+:global([data-orientation='rows']) .boardLine {
+  height: auto;
+  width: 0;
+  border-top: 0;
+  border-left: 2px solid var(--vscode-focusBorder);
+
+  &::before {
+    inset: 0 -5px;
+  }
+
+  &.ship {
+    border-left-style: dashed;
+  }
+}

@@ -1,11 +1,14 @@
 import {
     PROGRESS_FILE_MAX_BYTES,
     PROGRESS_NOTE_MAX_CHARS,
+    READY_STORIES_MAX,
     THINKERSYNC_HOME_SEGMENTS,
     parseProgressFile,
+    parseReadyFile,
     progressFileSegments,
     progressForRepository,
     progressProjectName,
+    readyFileSegments,
 } from './progressfileops';
 
 describe('progressFileSegments and progressProjectName', () => {
@@ -77,5 +80,31 @@ describe('progressForRepository', () => {
         const entries = parseProgressFile(JSON.stringify({ a: { pct: 5, at: '2026-11-03T10:00:00Z', by: 'agent' } }));
         expect(progressForRepository(entries, 'nt')).toEqual([{ root_relative: 'nt', story_id: 'a', pct: 5, at: '2026-11-03T10:00:00Z', by: 'agent' }]);
         expect(progressForRepository([], 'nt')).toEqual([]);
+    });
+});
+
+describe('ready file', () => {
+    it('sits beside the progress file', () => {
+        expect(readyFileSegments('notethink')).toEqual(['coordinator', 'notethink', 'ready.json']);
+    });
+
+    it('names the stories of its stories array', () => {
+        const text = JSON.stringify({ sha: 'abc', version: '1.0.0', stories: ['one', 'two'], closed_at: '2026-11-18T00:00:00Z', report: 'r' });
+        expect(parseReadyFile(text)).toEqual(['one', 'two']);
+    });
+
+    it('treats a missing array, bad JSON, a non-object and bad entries as no ready stories', () => {
+        expect(parseReadyFile('')).toEqual([]);
+        expect(parseReadyFile('{not json')).toEqual([]);
+        expect(parseReadyFile('[]')).toEqual([]);
+        expect(parseReadyFile('null')).toEqual([]);
+        expect(parseReadyFile('{"sha":"abc"}')).toEqual([]);
+        expect(parseReadyFile('{"stories":"one"}')).toEqual([]);
+        expect(parseReadyFile('{"stories":["ok",3,"",null,"also"]}')).toEqual(['ok', 'also']);
+    });
+
+    it('bounds how many stories one file contributes', () => {
+        const many = Array.from({ length: READY_STORIES_MAX + 5 }, (_, i) => `s${i}`);
+        expect(parseReadyFile(JSON.stringify({ stories: many }))).toHaveLength(READY_STORIES_MAX);
     });
 });

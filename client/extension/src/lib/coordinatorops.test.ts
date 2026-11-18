@@ -2,16 +2,20 @@ import {
     COORDINATOR_SEND_BODY_MAX_CHARS,
     COORDINATOR_VENDOR_NAMES,
     boardDocFor,
+    boardLinePositions,
     buildCoordinatorEnvelope,
     compactStamp,
     coordMarkerChanges,
     coordinatorsFrom,
+    isBuildable,
     isCoordinatorEntry,
     isCoordinatorVendorName,
     isSafeCoordinatorName,
+    isShippable,
     mailboxInboxSegments,
     markerAfter,
     parseBoardStories,
+    type BoardStory,
     type CoordinatorTextChange,
 } from './coordinatorops';
 import type { ResolvedRegistryAgent } from './agentregistryops';
@@ -247,5 +251,93 @@ describe('buildCoordinatorEnvelope', () => {
     it('names the compact stamp and the inbox path it files under', () => {
         expect(compactStamp(NOW)).toBe('20261111T093000Z');
         expect(mailboxInboxSegments('coord-demo')).toEqual(['mailboxes', 'coord-demo', 'inbox']);
+    });
+});
+
+function story(id: string, fields: Partial<BoardStory> = {}): BoardStory {
+    return { id, title: id, status: '', convoys: [], operator_steps: [], markers: [], sent: false, open_question: false, blocked: false, line_start: 0, line: '', ...fields };
+}
+
+describe('parseBoardStories line facts', () => {
+    const text = [
+        '### Sent one [](?id=sent-one&sent=go-1)',
+        '+ [ ] a task',
+        '',
+        '### Asked [](?id=asked&status=doing)',
+        '+ open question (decision): which way',
+        '',
+        '### Stuck [](?id=stuck&status=doing)',
+        '+ blocked on the vendor: waiting',
+        '',
+        '### Plain [](?id=plain)',
+        '+ open questions are not a line shape',
+        '+ [X] blocked tasks that are ticked do not count',
+    ].join('\n');
+
+    it('reads the sent tag, an open question and a blocked note', () => {
+        const stories = parseBoardStories(text);
+        expect(stories.map(s => [s.id, s.sent, s.open_question, s.blocked])).toEqual([
+            ['sent-one', true, false, false],
+            ['asked', false, true, false],
+            ['stuck', false, false, true],
+            ['plain', false, false, false],
+        ]);
+    });
+});
+
+describe('isBuildable', () => {
+    it('takes a story that was sent, is delegated or is at doing', () => {
+        expect(isBuildable(story('a', { sent: true }))).toBe(true);
+        expect(isBuildable(story('delegated-b'))).toBe(true);
+        expect(isBuildable(story('c', { status: 'doing' }))).toBe(true);
+        expect(isBuildable(story('d'))).toBe(false);
+    });
+
+    it('leaves out a story at code-review or testing even when it was sent', () => {
+        expect(isBuildable(story('a', { sent: true, status: 'code-review' }))).toBe(false);
+        expect(isBuildable(story('a', { status: 'testing' }))).toBe(false);
+    });
+
+    it('leaves out a story parked on a question, a blocked note, a manual task or a delegated task', () => {
+        expect(isBuildable(story('a', { status: 'doing', open_question: true }))).toBe(false);
+        expect(isBuildable(story('a', { status: 'doing', blocked: true }))).toBe(false);
+        expect(isBuildable(story('a', { status: 'doing', operator_steps: ['sign it'] }))).toBe(false);
+        expect(isBuildable(story('a', { status: 'doing', convoys: ['repo-b'] }))).toBe(false);
+    });
+});
+
+describe('isShippable', () => {
+    it('takes a story at code-review or testing, or one the ready file names', () => {
+        expect(isShippable(story('a', { status: 'code-review' }), [])).toBe(true);
+        expect(isShippable(story('a', { status: 'testing' }), [])).toBe(true);
+        expect(isShippable(story('a', { status: 'doing' }), ['a'])).toBe(true);
+        expect(isShippable(story('a', { status: 'doing' }), ['b'])).toBe(false);
+    });
+});
+
+describe('boardLinePositions', () => {
+    it('counts the stories at or above the last story each line marks', () => {
+        const stories = [
+            story('a', { status: 'code-review' }),
+            story('b', { status: 'doing' }),
+            story('c', { status: 'doing', open_question: true }),
+            story('d', { sent: true }),
+            story('e'),
+        ];
+        expect(boardLinePositions(stories, [])).toEqual({ build_after: 4, ship_after: 1 });
+        expect(boardLinePositions(stories, ['e'])).toEqual({ build_after: 4, ship_after: 5 });
+    });
+
+    it('is zero for both lines on a board with nothing to build or ship', () => {
+        expect(boardLinePositions([story('a'), story('b')], [])).toEqual({ build_after: 0, ship_after: 0 });
+        expect(boardLinePositions([], ['a'])).toEqual({ build_after: 0, ship_after: 0 });
+    });
+
+    it('reaches a coordinator row through its repository ready ids', () => {
+        const docs = [{ doc_path: 'demo/docstech/users/dev/todo.md', text: '### One [](?id=one&status=doing)\n\n\n### Two [](?id=two)\n' }];
+        const [row] = coordinatorsFrom([agent()], docs, new Map([['demo', ['two']]]));
+        expect(row).toMatchObject({ build_after: 1, ship_after: 2 });
+        const [plain] = coordinatorsFrom([agent()], docs);
+        expect(plain).toMatchObject({ build_after: 1, ship_after: 0 });
     });
 });

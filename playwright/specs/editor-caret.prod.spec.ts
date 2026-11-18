@@ -159,14 +159,14 @@ test.describe('The editor caret in a production build', () => {
         expect(focused_before).toEqual([]);
         const active_before = await page.evaluate(() => document.activeElement?.tagName + ':' + (document.activeElement as HTMLElement | null)?.dataset?.testid);
         const scroll_before = await scrollOffsets(page);
-        // the caret settles and blinks for a while with nothing else happening
+        // the caret settles and pulses for a while with nothing else happening
         await page.waitForTimeout(500);
         expect(await page.evaluate(() => document.activeElement?.tagName + ':' + (document.activeElement as HTMLElement | null)?.dataset?.testid)).toBe(active_before);
         expect(await scrollOffsets(page)).toBe(scroll_before);
         expect(await page.locator('[data-vc-linetag]').allTextContents()).toEqual(focused_before);
     });
 
-    test('follows the theme\'s cursor colour in light and dark, and blinks', async ({ page }) => {
+    test('follows the theme\'s cursor colour in light and dark, and pulses', async ({ page }) => {
         await harness(page);
         const doc_path = await openBoard(page);
         await simulateSelectionChanged(page, doc_path, fixtureOffsetOf(FIXTURE, 'Plain title') + 5);
@@ -176,6 +176,9 @@ test.describe('The editor caret in a production build', () => {
         await setTheme(page, 'light');
         await expect(caret).toHaveCSS('background-color', 'rgb(18, 52, 86)');
         expect(await caret.evaluate(el => getComputedStyle(el).animationName)).not.toBe('none');
+        // a pulse eases between opacities and alternates, where a blink would step straight from on to off
+        await expect(caret).toHaveCSS('animation-timing-function', 'ease-in-out');
+        await expect(caret).toHaveCSS('animation-direction', 'alternate');
         await expect(caret).toHaveCSS('pointer-events', 'none');
     });
 

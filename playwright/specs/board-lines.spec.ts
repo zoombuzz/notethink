@@ -253,6 +253,143 @@ test.describe('Build and ship lines', () => {
         expect(build_box.y).toBeLessThan(fourth.y + 2);
     });
 
+    // the title and first card boxes of a group, and every line drawn before that card
+    async function topGap(page: Page, group: Locator, horizontal: boolean): Promise<{ title: DOMRect; card: DOMRect; lines: DOMRect[] }> {
+        return group.evaluate((root, is_horizontal) => {
+            const box = (el: Element | null): DOMRect => el!.getBoundingClientRect();
+            const heading = root.querySelector('[role="columnheader"]');
+            const card = root.querySelector('[data-column-card-id]');
+            const lines = Array.from(root.querySelectorAll('[data-board-line]')).filter(line => {
+                const stroke = box(line);
+                const first = box(card);
+                return is_horizontal ? stroke.right <= first.left + 1 : stroke.bottom <= first.top + 1;
+            }).map(line => box(line));
+            return { title: box(heading), card: box(card), lines };
+        }, horizontal);
+    }
+
+    function expectInGap(gap: { title: DOMRect; card: DOMRect; lines: DOMRect[] }, count: number, horizontal: boolean): void {
+        expect(gap.lines).toHaveLength(count);
+        for (const line of gap.lines) {
+            if (horizontal) {
+                expect(line.left).toBeGreaterThan(gap.title.right);
+                expect(line.right).toBeLessThan(gap.card.left);
+            } else {
+                expect(line.top).toBeGreaterThan(gap.title.bottom);
+                expect(line.bottom).toBeLessThan(gap.card.top);
+            }
+        }
+        // stacked lines are separate strokes, not one on top of another
+        if (count > 1) {
+            const [one, two] = gap.lines;
+            expect(horizontal ? two.left : two.top).toBeGreaterThan(horizontal ? one.right : one.bottom);
+        }
+    }
+
+    test('the idle line sits in the gap between a group title and its first card without moving the card, alone and stacked with a ship line', async ({ page }) => {
+        await openSingleFile(page, 'board-lines.md', 'kanban', 'card');
+        await demandSeen(page);
+        await postSnapshot(page, []);
+        const doing = page.locator('[data-flip-column-id="doing"]');
+        const testing = page.locator('[data-flip-column-id="testing"]');
+        const before = { doing: await topGap(page, doing, false), testing: await topGap(page, testing, false) };
+        expect(before.doing.lines).toHaveLength(0);
+        // nothing to build and a ship line after Alpha: doing draws the idle line first, testing both stacked
+        await postSnapshot(page, [boardRow(IDS, 0, 1)]);
+        await expect(page.getByTestId('board-line-idle').first()).toBeVisible();
+        await expect(page.getByTestId('board-line-idle').first()).toHaveCSS('border-top-style', 'solid');
+        await expect(page.getByTestId('board-line-idle').first()).toHaveAttribute('aria-label', /no work set/);
+        expect(await sequenceIn(doing)).toEqual(['lines:idle', 'Alpha', 'lines:ship', 'Beta']);
+        expect(await sequenceIn(testing)).toEqual(['lines:idle+ship', 'Delta']);
+        const after = { doing: await topGap(page, doing, false), testing: await topGap(page, testing, false) };
+        expectInGap(after.doing, 1, false);
+        expectInGap(after.testing, 2, false);
+        expect(Math.abs(after.doing.card.top - before.doing.card.top)).toBeLessThan(0.5);
+        expect(Math.abs(after.testing.card.top - before.testing.card.top)).toBeLessThan(0.5);
+        expect(Math.abs(after.doing.title.bottom - before.doing.title.bottom)).toBeLessThan(0.5);
+        expect(Math.abs(after.testing.card.height - before.testing.card.height)).toBeLessThan(0.5);
+    });
+
+    test('the idle line in a windowed group sits in the gap above the first card and moves nothing', async ({ page }) => {
+        const ids = Array.from({ length: 40 }, (_, i) => `long-${String(i + 1).padStart(2, '0')}`);
+        await openSingleFile(page, 'board-lines-long.md', 'kanban', 'card');
+        await demandSeen(page);
+        await postSnapshot(page, []);
+        const group = page.locator('[data-column-group]').first();
+        const before = await topGap(page, group, false);
+        await postSnapshot(page, [boardRow(ids, 0, 0)]);
+        await expect(page.getByTestId('board-line-idle')).toHaveCount(1);
+        expect(await page.locator('[data-column-card-id]').count()).toBeLessThan(40);
+        const after = await topGap(page, group, false);
+        expectInGap(after, 1, false);
+        expect(Math.abs(after.card.top - before.card.top)).toBeLessThan(0.5);
+        // stacked with a ship line that also falls before the first card, its two stories being on the board but not in view
+        await postSnapshot(page, [boardRow(['earlier-1', 'earlier-2', ...ids], 0, 2)]);
+        await expect(page.getByTestId('board-line-ship')).toHaveCount(1);
+        const stacked = await topGap(page, group, false);
+        expectInGap(stacked, 2, false);
+        expect(Math.abs(stacked.card.top - before.card.top)).toBeLessThan(0.5);
+    });
+
+    test('a stacked-row board puts the idle line in the gap beside the first card, alone and stacked, without moving the card', async ({ page }) => {
+        await openHarness(page);
+        await page.evaluate(() => {
+            const harness = window as unknown as { __nt_settings: { workspace: { views: Record<string, Record<string, unknown>> } }; __nt_publishSettings?: () => void };
+            harness.__nt_settings.workspace.views.line = { ...harness.__nt_settings.workspace.views.line, orientation: 'rows' };
+            harness.__nt_publishSettings?.();
+        });
+        await injectDocsFromFixture(page, 'board-lines.md', `${WORKSPACE_ROOT}/${DEMO_TODO}`, { workspace_root: WORKSPACE_ROOT, relative_path: DEMO_TODO });
+        await page.waitForSelector('[data-seq]', { timeout: 5000 });
+        await sendCommand(page, 'setViewType', { viewType: 'kanban' });
+        await demandSeen(page);
+        await expect(page.locator('[data-flip-root]')).toHaveAttribute('data-orientation', 'rows');
+        const doing = page.locator('[data-flip-column-id="doing"]');
+        const testing = page.locator('[data-flip-column-id="testing"]');
+        await postSnapshot(page, []);
+        const before = { doing: await topGap(page, doing, true), testing: await topGap(page, testing, true) };
+        await postSnapshot(page, [boardRow(IDS, 0, 1)]);
+        await expect(page.getByTestId('board-line-idle').first()).toBeVisible();
+        const after = { doing: await topGap(page, doing, true), testing: await topGap(page, testing, true) };
+        expectInGap(after.doing, 1, true);
+        expectInGap(after.testing, 2, true);
+        for (const line of [...after.doing.lines, ...after.testing.lines]) {
+            expect(line.height).toBeGreaterThan(line.width * 4);
+        }
+        expect(Math.abs(after.doing.card.left - before.doing.card.left)).toBeLessThan(0.5);
+        expect(Math.abs(after.doing.card.top - before.doing.card.top)).toBeLessThan(0.5);
+        expect(Math.abs(after.testing.card.left - before.testing.card.left)).toBeLessThan(0.5);
+        expect(Math.abs(after.testing.card.top - before.testing.card.top)).toBeLessThan(0.5);
+    });
+
+    test('the document view puts the idle line in the gap between the board title and its first story without moving it', async ({ page }) => {
+        await openSingleFile(page, 'board-lines.md', 'document', 'card');
+        await demandSeen(page);
+        await postSnapshot(page, []);
+        const read = async (): Promise<{ title_bottom: number; card_top: number; lines: Array<[number, number]> }> => page.evaluate(() => {
+            const first = Array.from(document.querySelectorAll<HTMLElement>('[data-mdast-type="heading"]')).find(el => (el.textContent ?? '').trimStart().startsWith('Alpha story'))!;
+            const title = Array.from(document.querySelectorAll<HTMLElement>('*')).find(el => el.children.length === 0 && (el.textContent ?? '').trim() === 'Todo')!;
+            const lines = Array.from(document.querySelectorAll('[data-board-line]')).map((line): [number, number] => [line.getBoundingClientRect().top, line.getBoundingClientRect().bottom]);
+            return { title_bottom: title.getBoundingClientRect().bottom, card_top: first.closest('[data-seq]')!.getBoundingClientRect().top, lines };
+        });
+        const before = await read();
+        await postSnapshot(page, [boardRow(IDS, 0, 0)]);
+        await expect(page.getByTestId('board-line-idle')).toHaveCount(1);
+        const alone = await read();
+        expect(alone.lines).toHaveLength(1);
+        expect(alone.lines[0][0]).toBeGreaterThan(alone.title_bottom);
+        expect(alone.lines[0][1]).toBeLessThan(alone.card_top);
+        expect(Math.abs(alone.card_top - before.card_top)).toBeLessThan(0.5);
+        // stacked with a ship line that also falls before the first story, its two stories being on the board but not in view
+        await postSnapshot(page, [boardRow(['earlier-1', 'earlier-2', ...IDS], 0, 2)]);
+        await expect(page.getByTestId('board-line-ship').first()).toBeVisible();
+        const stacked = await read();
+        expect(stacked.lines.slice(0, 2)).toHaveLength(2);
+        expect(stacked.lines[0][0]).toBeGreaterThan(stacked.title_bottom);
+        expect(stacked.lines[1][1]).toBeLessThan(stacked.card_top);
+        expect(stacked.lines[1][0]).toBeGreaterThan(stacked.lines[0][1]);
+        expect(Math.abs(stacked.card_top - before.card_top)).toBeLessThan(0.5);
+    });
+
     test('a board opened as a folder draws the lines too, in the document and kanban views', async ({ page }) => {
         await openHarness(page);
         await injectMultipleDocsFromFixtures(page, [{ fixture: 'coordinator-todo.md', doc_path: `${WORKSPACE_ROOT}/${DEMO_TODO}`, relative_path: DEMO_TODO }], { workspace_root: WORKSPACE_ROOT });

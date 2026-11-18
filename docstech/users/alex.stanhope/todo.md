@@ -1,6 +1,35 @@
 # Todo [](?nt_view=kanban)
 
 
+### Show idle boards and an honest ready line [](?id=board-lines-idle-and-ready-run&status=code-review&sent=go-20261118&tokens_estimated=8)
+
+A board with nothing for its coordinator to build shows no solid line, so an idle project is easy to miss. The dashed line sits below the last ready story, which implies every story above it is ready when many are not.
+
++ goal: the solid line shows at a glance where no coordinator work is set
++ goal: everything above the dashed line is ready
++ builds on: `boardLinePositions` in `client/extension/src/lib/coordinatorops.ts`
++ builds on: `boardLineSlots` in `client/webview/src/notethink-views/src/lib/boardlineops.ts`
++ evidence 2026-11-18: on one 106-story board the only ready story is number 22, so the dashed line claimed 21 unready stories were ready
++ decision: with nothing to build, the solid line sits at the top of the column, in the gap between its title and first story
++ decision: a line at the top never moves the first story down
++ proceeded on the recommendation 2026-11-18, for the operator to confirm: the dashed line sits below the unbroken run of ready stories from the top of the board, and is absent when the first story is not ready
++ [X] move the dashed line to the end of the unbroken ready run, with Jest cases
++ [X] draw the solid line at the top of each column when the board has nothing to build, with an accessible name saying so
++ [X] overlay every line at the top of a column in the gap, so no card moves, in normal and windowed groups and both orientations
++ [X] measure in a rendered page that the first card does not move and the line touches neither the title nor the card
++ [X] bump the patch version
++ manual: check the top line on an idle project in VS Code
+
+
+### Confirm where the dashed line goes [](?id=board-lines-dashed-decision&tokens_estimated=1)
+
+Ready stories are often not at the top of a board, because new stories are filed above them, so one line cannot both mark every ready story and promise that everything above it is ready.
+
++ evidence 2026-11-18: of the 10 boards with ready stories, 5 have an unready story first, so they would show no dashed line under the unbroken-run rule
++ open question: Where should the dashed line go when ready stories are not all together at the top? The build now places it below the unbroken ready run from the top, so everything above it is ready, but a board whose first story is not ready shows no dashed line even if a push would ship work. Recommendation: keep this, because it never claims an unready story is ready.
++ [ ] apply the confirmed answer to the dashed line and its tests
+
+
 ### Make the board lines match what will happen [](?id=board-lines-accuracy&status=code-review&sent=go-20261118&tokens_estimated=8)
 
 The build and ship lines can sit far below the work they describe. A folder view shows only the first stories of each file, so a line further down is drawn at the bottom of the shown stories, and the counting rules include stories that neither a coordinator nor a push will act on.

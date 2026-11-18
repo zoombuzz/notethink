@@ -6,8 +6,9 @@ import type { NoteProps } from "../types/NoteProps";
 
 /**
  * The build and ship lines across a view of a board's stories: the pure half. The build line marks the
- * last story the coordinator will build if left to run, and the ship line the last story that has passed
- * the release gate. Both belong to the view, not to a card, so this module answers one question for any
+ * last story the coordinator will build if left to run (drawn at the top of the group, as the idle line,
+ * when there is none), and the ship line the end of the unbroken run of stories from the top of the board
+ * that have passed the release gate (not drawn when the first story has not). Both belong to the view, not to a card, so this module answers one question for any
  * view: given the stories it shows in order, which lines are drawn before each of them and after the last.
  *
  * The host computes each board file's lines from the board itself and sends them as a count of the
@@ -20,8 +21,14 @@ import type { NoteProps } from "../types/NoteProps";
 export const BOARD_LINE_KINDS = ['build', 'ship'] as const;
 export type BoardLineKind = typeof BOARD_LINE_KINDS[number];
 
+/**
+ * What a drawn line says: the two kinds, or `idle`, the solid line at the top of a group when the
+ * board has nothing for its coordinator to build. It is drawn as the build line, with words of its own.
+ */
+export type BoardLineMark = BoardLineKind | 'idle';
+
 /** the line slots for a list of cards: slot `i` holds the lines drawn before card `i`, and the last slot those after the final card */
-export type BoardLineSlots = BoardLineKind[][];
+export type BoardLineSlots = BoardLineMark[][];
 
 /** how many stories sit at or above a line, 0 when the board has none to mark */
 function linePosition(board: ActivityBoardLines, kind: BoardLineKind): number {
@@ -56,8 +63,9 @@ function boardIndices(board: ActivityBoardLines, keys: ReadonlyArray<ActivitySto
  *
  * A line with `n` stories at or above it falls after the last card whose board index is below `n`. When
  * every card sits below it, it falls before the first story card (a group whose cards all sit below the
- * line draws it first), and when every card sits above it, after the last (so it draws last). A line that
- * marks no story at all is not drawn.
+ * line draws it first), and when every card sits above it, after the last (so it draws last). A ship
+ * line that marks no story is not drawn. A build line the host reports as 0 is drawn as `idle` before the first
+ * story card of the group, because a board with nothing to build is where a coordinator has room.
  */
 export function boardLineSlots(keys: ReadonlyArray<ActivityStoryKey | undefined>, boards: ReadonlyArray<ActivityBoardLines>): BoardLineSlots {
     const slots: BoardLineSlots = Array.from({ length: keys.length + 1 }, () => []);
@@ -68,7 +76,10 @@ export function boardLineSlots(keys: ReadonlyArray<ActivityStoryKey | undefined>
         if (placed.some((entry, i) => i > 0 && entry.board_index < placed[i - 1].board_index)) { return slots; }
         for (const kind of BOARD_LINE_KINDS) {
             const after = linePosition(board, kind);
-            if (after <= 0) { continue; }
+            if (after <= 0) {
+                if (kind === 'build' && board.build_after === 0) { slots[placed[0].position].push('idle'); }
+                continue;
+            }
             const above = placed.filter(entry => entry.board_index < after);
             const slot = above.length > 0 ? above[above.length - 1].position + 1 : placed[0].position;
             slots[slot].push(kind);

@@ -1703,7 +1703,8 @@ body.disableAddressBarHidingOnScroll {
           flex: 0 0 auto;
           align-self: stretch;
           padding: 0 6px 0 10px;
-          margin-right: 4px;
+          // room for the board lines drawn beside the first card, two 2px lines 4px apart
+          margin-right: 12px;
           text-align: left;
 
           h3 {
@@ -1857,10 +1858,12 @@ body.disableAddressBarHidingOnScroll {
       }
 
       .notes {
+        // the containing block for the board lines drawn in the gap above the first card
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 20px;
-        // room for focus/selection outline on the first card
+        // room for focus/selection outline on the first card, and for the board lines at the top of the group
         padding-top: 12px;
       }
 

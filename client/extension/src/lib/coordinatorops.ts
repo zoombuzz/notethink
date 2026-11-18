@@ -238,17 +238,18 @@ export function isShippable(story: Pick<BoardStory, 'id' | 'status'>, ready_ids:
 }
 
 /**
- * How many stories sit at or above the last story each line marks, 0 when a line marks none. The build
- * line is the last buildable story, the ship line the last shippable one, whichever way the board is
- * ordered between them.
+ * How many stories sit at or above each line, 0 when a line marks none. The build line is the last
+ * buildable story, whichever way the board is ordered between them. The ship line is the end of the
+ * unbroken run of shippable stories from the top of the board, so everything above it has passed the
+ * release gate, and it is 0 (no line) when the first story has not.
  */
 export function boardLinePositions(stories: ReadonlyArray<BoardStory>, facts: BoardLineFacts = {}): { build_after: number; ship_after: number } {
     let build_after = 0;
-    let ship_after = 0;
     stories.forEach((story, index) => {
         if (isBuildable(story, facts)) { build_after = index + 1; }
-        if (isShippable(story, facts.ready_ids ?? [])) { ship_after = index + 1; }
     });
+    let ship_after = 0;
+    while (ship_after < stories.length && isShippable(stories[ship_after], facts.ready_ids ?? [])) { ship_after += 1; }
     return { build_after, ship_after };
 }
 

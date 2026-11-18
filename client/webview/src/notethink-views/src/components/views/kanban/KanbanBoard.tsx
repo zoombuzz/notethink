@@ -138,7 +138,7 @@ export default function KanbanBoard(boardProps: KanbanBoardProps): ReactElement 
                                         dragDisabled,
                                         card_height: board.cardHeight,
                                         card_widths: board.cardWidths,
-                                    })), board_lines.slots[i])}
+                                    })), board_lines.slots[i], true)}
                                     {provided_drop.placeholder}
                                 </KanbanColumn>
                             )}

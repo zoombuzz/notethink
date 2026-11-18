@@ -243,5 +243,6 @@
   "Asked {0} to change vendor.": "Asked {0} to change vendor.",
   "The vendor change could not be sent.": "The vendor change could not be sent.",
   "Build line: the coordinator will build the stories above this line if left to run": "Build line: the coordinator will build the stories above this line if left to run",
+  "Build line: the coordinator has no work set on this board": "Build line: the coordinator has no work set on this board",
   "Ship line: the stories above this line have passed the release gate": "Ship line: the stories above this line have passed the release gate"
 }

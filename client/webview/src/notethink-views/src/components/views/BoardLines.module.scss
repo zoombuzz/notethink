@@ -30,9 +30,10 @@
   }
 }
 
-// a windowed group places its rows by solved offsets, so its lines overlay the row edge and take no room
+// a windowed group places its rows by solved offsets, so its lines overlay the row edge and take no room, and the lines at the top of a group overlay the 12px gap above its first card
 .edgeBefore,
-.edgeAfter {
+.edgeAfter,
+.edgeTop {
   position: absolute;
   left: 0;
   right: 0;
@@ -40,8 +41,25 @@
   z-index: 1;
 }
 
+// stacked, the two lines span 8px, so both stay inside the 12px gap between the group's title and its first card
 .edgeBefore {
-  top: -8px;
+  top: -10px;
+}
+
+.edgeTop {
+  top: 2px;
+}
+
+// outside a positioned container, a zero-height block stands where the first item begins and the lines rise above it
+.topAnchor {
+  position: relative;
+  height: 0;
+  width: 100%;
+
+  .edgeTop {
+    top: auto;
+    bottom: 2px;
+  }
 }
 
 .edgeAfter {
@@ -56,6 +74,16 @@
   align-self: stretch;
   width: auto;
   margin: 0 2px;
+}
+
+:global([data-orientation='rows']) .boardLines.edgeTop {
+  // beside the first card: the gap between the group's title and the card, as tall as the row
+  top: 0;
+  bottom: 0;
+  left: -10px;
+  right: auto;
+  width: auto;
+  margin: 0;
 }
 
 :global([data-orientation='rows']) .boardLine {

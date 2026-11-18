@@ -1,25 +1,25 @@
 # Prod-ready Results
-# Version: 0.4.55
-# Date: 2026-11-18T19:35:00Z
-# Tree: 6c3d7f2 plus the working tree (13 source and test files, the story board, package.json, one new fixture, the reports)
-# Stories: board-lines-accuracy doing -> code-review; coordinator-board-lines, coordinator-target-line-rule, keep-each-card-tag-on-one-row, pulse-the-editor-caret-instead-of-blinking-it not touched (outside stories=); playwright-webserver-start-timeouts not touched
-# Ship verdict: Ready to ship: /push-prod will move "Make the board lines match what will happen" to done.md
+# Version: 0.4.56
+# Date: 2026-11-18T19:58:00Z
+# Tree: 288c743 plus the working tree (10 source, test and style files, five l10n bundles, two specs, the story board, package.json, the reports)
+# Stories: board-lines-idle-and-ready-run doing -> code-review; every other story not touched (outside stories=)
+# Ship verdict: Ready to ship: /push-prod will move "Show idle boards and an honest ready line" to done.md
 # ---
 Overseer inbox | skipped | no overseer review (bus absent) | skipped
 Story reconciliation | ok | all tasks already ticked | fresh
-Build | ok | pnpm run build, bundles contain the change | fresh
-Lint | ok | green stamp | reused (green at 2026-11-18T19:22:26Z)
+Build | ok | pnpm run build and rollup, bundles contain the change | fresh
+Lint | ok | 0 errors, 2 existing warnings | fresh
 Project guards | skipped | none for this project | skipped
 Dependency audit | ok | no known vulnerabilities | fresh
 CODING_STANDARDS | ok | mechanical checks and inline pass clean | fresh
-Exposure | ok | public: scan clean, board text and fixture read | fresh
+Exposure | ok | public: scan clean, board text and specs read | fresh
 Fleet fix check | ok | no shared-surface or new-dependency-class hit | fresh
-Jest | ok | 4105 of 4105 passed across 184 suites (three Jest projects) | reused (green at 2026-11-18T19:22:43Z)
-Playwright | ok | 391/391 passed | fresh
+Jest | ok | 4117 of 4117 passed across 184 suites (three Jest projects) | fresh
+Playwright | ok | 395/395 passed, none flaky or skipped | fresh
 Todo/Done | ok | board format 0 findings, move rehearsal exit 0 | fresh
 Story-state advance | ok | doing -> code-review | fresh
-Version bump | ok | 0.4.55 | fresh
+Version bump | ok | 0.4.56 | fresh
 # --- Fixed during review ---
-none
+Comments: one stylesheet comment of two consecutive lines merged into one
 # --- Open ---
 none

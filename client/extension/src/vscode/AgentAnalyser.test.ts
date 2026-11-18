@@ -2997,7 +2997,7 @@ describe('AgentAnalyser coordinators', () => {
 
 			it('take the ship line from the ready file kept under the repository directory name', async () => {
 				wireCoordinatorFiles(undefined);
-				wireBoard(LINES_BOARD, { [READY_PATH]: JSON.stringify({ stories: ['beta'] }) });
+				wireBoard(LINES_BOARD, { [READY_PATH]: JSON.stringify({ stories: ['alpha', 'beta'] }) });
 				const { posted } = await boardLinesPosted();
 				expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 1, ship_after: 2 })]);
 			});
@@ -3037,7 +3037,7 @@ describe('AgentAnalyser coordinators', () => {
 				});
 
 				it('count a ready marker whose commit is still unpushed, with the branch ahead of its upstream', async () => {
-					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, { ...BRANCH, ahead: 2 }, [{ name: 'origin/staging', commit: UPSTREAM }]);
+					wireWith({ 'coordinator/ws/ready.json': ready(['alpha', 'beta']) }, { ...BRANCH, ahead: 2 }, [{ name: 'origin/staging', commit: UPSTREAM }]);
 					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 2 })]);
 				});
 
@@ -3049,9 +3049,9 @@ describe('AgentAnalyser coordinators', () => {
 				});
 
 				it('keep a ready marker when git has no upstream or no repository to ask', async () => {
-					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, { name: 'staging', commit: 'a'.repeat(40) });
+					wireWith({ 'coordinator/ws/ready.json': ready(['alpha', 'beta']) }, { name: 'staging', commit: 'a'.repeat(40) });
 					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 2 })]);
-					wireWith({ 'coordinator/ws/ready.json': ready(['beta']) }, BRANCH);
+					wireWith({ 'coordinator/ws/ready.json': ready(['alpha', 'beta']) }, BRANCH);
 					(vscode.commands.getCommands as jest.Mock).mockResolvedValue([]);
 					expect(lastLines((await boardLinesPosted()).posted)).toEqual([expect.objectContaining({ ship_after: 2 })]);
 				});
@@ -3068,7 +3068,7 @@ describe('AgentAnalyser coordinators', () => {
 					watcher!.result.onDidChange.mock.calls[0][0]();
 					await jest.advanceTimersByTimeAsync(500);
 					await settle();
-					expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 2, ship_after: 4, story_ids: ['alpha', 'beta', 'gamma', 'delta'] })]);
+					expect(lastLines(posted)).toEqual([expect.objectContaining({ build_after: 2, ship_after: 0, story_ids: ['alpha', 'beta', 'gamma', 'delta'] })]);
 				});
 			});
 

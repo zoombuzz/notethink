@@ -243,5 +243,6 @@
   "Asked {0} to change vendor.": "È stato chiesto a {0} di cambiare fornitore.",
   "The vendor change could not be sent.": "Non è stato possibile inviare il cambio di fornitore.",
   "Build line: the coordinator will build the stories above this line if left to run": "Linea di costruzione: il coordinatore costruirà le storie sopra questa linea se lasciato in esecuzione",
+  "Build line: the coordinator has no work set on this board": "Linea di costruzione: il coordinatore non ha lavoro assegnato su questa bacheca",
   "Ship line: the stories above this line have passed the release gate": "Linea di rilascio: le storie sopra questa linea hanno superato il controllo di rilascio"
 }

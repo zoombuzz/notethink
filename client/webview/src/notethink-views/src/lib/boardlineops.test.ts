@@ -35,9 +35,31 @@ describe('boardLineSlots', () => {
         expect(slots[0]).toEqual(['build']);
     });
 
-    it('draws nothing in an empty group and nothing for a line that marks no story', () => {
+    it('draws nothing in an empty group and no ship line for a line that marks no story', () => {
         expect(hasAnyBoardLine(boardLineSlots([], [board(2, 2)]))).toBe(false);
-        expect(hasAnyBoardLine(boardLineSlots(keys('a', 'b'), [board(0, 0)]))).toBe(false);
+        expect(boardLineSlots(keys('a', 'b'), [board(2, 0)]).flat()).toEqual(['build']);
+    });
+
+    it('draws the idle line before the first story card when the board has nothing to build', () => {
+        const slots = boardLineSlots(keys('a', 'b'), [board(0, 0)]);
+        expect(slots[0]).toEqual(['idle']);
+        expect(slots.flat()).toHaveLength(1);
+    });
+
+    it('draws the idle line before the first story card of each group, whichever stories it holds', () => {
+        expect(boardLineSlots(keys('c', 'd'), [board(0, 0)])[0]).toEqual(['idle']);
+        expect(boardLineSlots([undefined, ...keys('d', 'e')], [board(0, 0)])[1]).toEqual(['idle']);
+    });
+
+    it('stacks the idle line above a ship line that also falls before the first card', () => {
+        expect(boardLineSlots(keys('d', 'e'), [board(0, 2)])[0]).toEqual(['idle', 'ship']);
+        expect(boardLineSlots(keys('a', 'b', 'c'), [board(0, 2)]).map(slot => slot.join('+'))).toEqual(['idle', '', 'ship', '']);
+    });
+
+    it('draws no idle line for a view with no matching board, one out of board order or an entry with no positions', () => {
+        expect(hasAnyBoardLine(boardLineSlots(keys('a', 'b'), []))).toBe(false);
+        expect(hasAnyBoardLine(boardLineSlots([{ doc_path: 'other/todo.md', id: 'a' }], [board(0, 0)]))).toBe(false);
+        expect(hasAnyBoardLine(boardLineSlots(keys('b', 'a'), [board(0, 0)]))).toBe(false);
     });
 
     it('draws nothing when the cards are not in board order', () => {

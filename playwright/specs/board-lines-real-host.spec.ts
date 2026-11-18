@@ -9,19 +9,24 @@ import { join, resolve } from 'node:path';
  * End-to-end coverage for "the build and ship lines come from the board on disk alone".
  *
  * Drives a real VS Code web host (@vscode/test-web serving the built extension) over a generated
- * workspace holding two users' `docstech/users/<name>/todo.md` boards, one story handed to a coordinator
- * (`sent=`), one not, and one at `code-review`, and no agent registry, coordinator file or ready file
+ * workspace holding two users' `docstech/users/<name>/todo.md` boards, the first story at `code-review`, then one handed
+ * to a coordinator (`sent=`) and one not, and no agent registry, coordinator file or ready file
  * anywhere. A web host has no agent home at all, so the analyser reports itself unavailable; the lines
  * must still arrive, from the board files the extension host reads, in the kanban view and the document
  * view. A snapshot posted by hand cannot prove this, because it supplies the very data whose source is
  * in question.
  */
 const REPO_ROOT = resolve(__dirname, '../..');
-const STORY_NAMES = ['Sent story', 'Unsent story', 'Review story'];
+const STORY_NAMES = ['Review story', 'Sent story', 'Unsent story'];
 
 function board(view: string): string {
     return [
         `# Todo [](?nt_view=${view})`,
+        '',
+        '',
+        '### Review story [](?id=review-story&status=code-review)',
+        '',
+        '+ [X] a task',
         '',
         '',
         '### Sent story [](?id=sent-story&sent=go-1)',
@@ -32,11 +37,6 @@ function board(view: string): string {
         '### Unsent story [](?id=unsent-story)',
         '',
         '+ [ ] a task',
-        '',
-        '',
-        '### Review story [](?id=review-story&status=code-review)',
-        '',
-        '+ [X] a task',
         '',
     ].join('\n');
 }
@@ -120,7 +120,7 @@ test.describe('Build and ship lines on a real extension host with a board on dis
         rmSync(workspace, { recursive: true, force: true });
     });
 
-    test('the document view draws the solid build line after the sent story and the dashed ship line after the review story', async ({ page }) => {
+    test('the document view draws the dashed ship line after the review story at the top and the solid build line after the sent story', async ({ page }) => {
         test.setTimeout(240_000);
         await openBoardInViewer(page, port, 'docuser');
         await expect.poll(() => webviewFrame(page, 'board-line-build'), { timeout: 90_000 }).toBeDefined();
@@ -129,7 +129,7 @@ test.describe('Build and ship lines on a real extension host with a board on dis
         await expect(frame.getByTestId('board-line-ship')).toHaveCount(1);
         await expect(frame.getByTestId('board-line-build')).toHaveCSS('border-top-style', 'solid');
         await expect(frame.getByTestId('board-line-ship')).toHaveCSS('border-top-style', 'dashed');
-        await expect.poll(() => sequenceIn(frame)).toEqual(['Sent story', 'lines:build', 'Unsent story', 'Review story', 'lines:ship']);
+        await expect.poll(() => sequenceIn(frame)).toEqual(['Review story', 'lines:ship', 'Sent story', 'lines:build', 'Unsent story']);
     });
 
     test('the kanban view draws both lines in each column, placed by the order of the board file', async ({ page }) => {
@@ -140,7 +140,7 @@ test.describe('Build and ship lines on a real extension host with a board on dis
         await expect(frame.locator('[role="columnheader"]').first()).toBeVisible();
         await expect(frame.getByTestId('board-line-build').first()).toHaveCSS('border-top-style', 'solid');
         await expect(frame.getByTestId('board-line-ship').first()).toHaveCSS('border-top-style', 'dashed');
-        // each column draws the lines between its own cards, so the code-review column opens with the build line
-        await expect.poll(() => sequenceIn(frame)).toEqual(['Sent story', 'lines:build', 'Unsent story', 'lines:ship', 'lines:build', 'Review story', 'lines:ship']);
+        // each column draws the lines between its own cards: the ship line opens the column whose cards all sit below it
+        await expect.poll(() => sequenceIn(frame)).toEqual(['lines:ship', 'Sent story', 'lines:build', 'Unsent story', 'Review story', 'lines:build+ship']);
     });
 });

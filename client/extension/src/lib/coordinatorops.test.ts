@@ -344,7 +344,20 @@ describe('boardLinePositions', () => {
             story('e'),
         ];
         expect(boardLinePositions(stories)).toEqual({ build_after: 4, ship_after: 1 });
-        expect(boardLinePositions(stories, { ready_ids: ['e'] })).toEqual({ build_after: 4, ship_after: 5 });
+        expect(boardLinePositions(stories, { ready_ids: ['e'] })).toEqual({ build_after: 4, ship_after: 1 });
+        expect(boardLinePositions(stories, { ready_ids: ['b', 'c', 'd', 'e'] })).toEqual({ build_after: 4, ship_after: 5 });
+    });
+
+    it('ends the ship line at the unbroken run of shippable stories from the top, stopping at the first story that is not', () => {
+        const stories = [story('a', { status: 'code-review' }), story('b', { status: 'testing' }), story('c'), story('d', { status: 'code-review' })];
+        expect(boardLinePositions(stories).ship_after).toBe(2);
+        expect(boardLinePositions(stories, { ready_ids: ['c'] }).ship_after).toBe(4);
+    });
+
+    it('draws no ship line when the first story is not shippable, however many below it are', () => {
+        const stories = [story('a'), story('b', { status: 'code-review' }), story('c', { status: 'code-review' })];
+        expect(boardLinePositions(stories).ship_after).toBe(0);
+        expect(boardLinePositions(stories, { ready_ids: ['b'] }).ship_after).toBe(0);
     });
 
     it('puts the solid line on the story in flight and not on a later story left at doing', () => {
@@ -377,21 +390,21 @@ describe('boardLinesFrom', () => {
 
     it('computes each user todo.md board alone, with no coordinator, leaving out done.md, other todo.md files and boards with no story', () => {
         expect(boardLinesFrom(docs)).toEqual([
-            { doc_path: 'demo/docstech/users/dev/todo.md', story_ids: ['one', 'two', 'three'], build_after: 1, ship_after: 3 },
+            { doc_path: 'demo/docstech/users/dev/todo.md', story_ids: ['one', 'two', 'three'], build_after: 1, ship_after: 0 },
         ]);
     });
 
     it('takes the facts of the board a document path names, leaving other boards to the statuses', () => {
         const text = '### One [](?id=one)\n\n\n### Two [](?id=two)\n';
         const boards = [{ doc_path: 'demo/docstech/users/dev/todo.md', text }, { doc_path: 'other/docstech/users/dev/todo.md', text }];
-        const lines = boardLinesFrom(boards, new Map([['demo/docstech/users/dev/todo.md', { ready_ids: ['two'], in_flight: ['one'] }]]));
+        const lines = boardLinesFrom(boards, new Map([['demo/docstech/users/dev/todo.md', { ready_ids: ['one', 'two'], in_flight: ['one'] }]]));
         expect(lines.map(entry => [entry.doc_path, entry.build_after, entry.ship_after])).toEqual([['demo/docstech/users/dev/todo.md', 1, 2], ['other/docstech/users/dev/todo.md', 0, 0]]);
     });
 
     it('keeps both lines on a board where two stories share an id', () => {
-        const text = '### Same [](?id=same&sent=go-1)\n\n\n### Same [](?id=same&status=code-review)\n';
+        const text = '### Same [](?id=same&status=code-review)\n\n\n### Same [](?id=same&sent=go-1)\n';
         const [entry] = boardLinesFrom([{ doc_path: 'demo/docstech/users/dev/todo.md', text }]);
-        expect(entry).toMatchObject({ story_ids: ['same', 'same'], build_after: 1, ship_after: 2 });
+        expect(entry).toMatchObject({ story_ids: ['same', 'same'], build_after: 2, ship_after: 1 });
     });
 
     it('puts boards in path order and bounds the story ids a board lists', () => {

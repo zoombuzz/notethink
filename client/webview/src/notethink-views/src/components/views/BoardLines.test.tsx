@@ -47,6 +47,22 @@ describe('BoardLines', () => {
         expect(screen.getByTestId('board-lines')).toHaveAttribute('data-board-lines', 'build ship');
     });
 
+    it('draws the idle line solid with its own accessible name, tooltip and test id', () => {
+        render(<BoardLines kinds={['idle']} />);
+        const idle = screen.getByTestId('board-line-idle');
+        expect(idle).toHaveAttribute('aria-label', boardLineLabel('idle'));
+        expect(idle).toHaveAttribute('title', boardLineLabel('idle'));
+        expect(idle.className).toContain('build');
+        expect(idle.className).not.toContain('ship');
+        expect(boardLineLabel('idle')).toContain('no work set');
+        expect(boardLineLabel('idle')).not.toBe(boardLineLabel('build'));
+    });
+
+    it('overlays the gap at the top when given the top edge', () => {
+        render(<BoardLines kinds={['idle']} edge="top" />);
+        expect(screen.getByTestId('board-lines').className).toContain('edgeTop');
+    });
+
     it('draws nothing for no kinds', () => {
         const { container } = render(<BoardLines kinds={[]} />);
         expect(container).toBeEmptyDOMElement();
@@ -57,8 +73,29 @@ describe('withBoardLines', () => {
     const items = [<i key="a" data-testid="a" />, <i key="b" data-testid="b" />];
 
     it('lays each slot before its item and the last after the final item', () => {
-        const { container } = render(<>{withBoardLines(items, [['build'], [], ['ship']])}</>);
+        const { container } = render(<>{withBoardLines(items, [['build'], [], ['ship']], true)}</>);
         expect([...container.children].map(el => el.getAttribute('data-board-lines') ?? el.getAttribute('data-testid'))).toEqual(['build', 'a', 'b', 'ship']);
+    });
+
+    it('overlays the lines before the first item in a positioned parent, taking no room of their own', () => {
+        const { container } = render(<>{withBoardLines(items, [['idle'], [], []], true)}</>);
+        const first = container.firstElementChild!;
+        expect(first.getAttribute('data-board-lines')).toBe('idle');
+        expect(first.className).toContain('edgeTop');
+    });
+
+    it('stands the lines before the first item on a zero-height anchor outside a positioned parent', () => {
+        const { container } = render(<>{withBoardLines(items, [['idle', 'ship'], [], []])}</>);
+        const anchor = container.firstElementChild!;
+        expect(anchor.className).toContain('topAnchor');
+        expect(anchor.querySelector('[data-board-lines="idle ship"]')!.className).toContain('edgeTop');
+        expect(anchor.nextElementSibling!.getAttribute('data-testid')).toBe('a');
+    });
+
+    it('lays a line between two items directly, with no overlay', () => {
+        const { container } = render(<>{withBoardLines(items, [[], ['build'], []])}</>);
+        const lines = container.querySelector('[data-board-lines="build"]')!;
+        expect(lines.className).not.toContain('edge');
     });
 
     it('returns the items as they were when no line applies', () => {
@@ -77,6 +114,13 @@ describe('BoardLinedBodyItems', () => {
         expect(screen.queryByTestId('board-lines')).toBeNull();
         seed([board(1, 2)]);
         expect([...container.children].map(el => el.getAttribute('data-board-lines') ?? el.getAttribute('data-testid'))).toEqual(['note-1', 'build', 'note-2', 'ship', 'note-3']);
+    });
+
+    it('draws the idle line at the top, on an anchor above the first story, when the board has nothing to build', () => {
+        const { container } = render(<BoardLinedBodyItems note={body()} />);
+        seed([board(0, 0)]);
+        expect(container.firstElementChild!.querySelector('[data-board-lines="idle"]')).not.toBeNull();
+        expect(container.children[1].getAttribute('data-testid')).toBe('note-1');
     });
 
     it('asks the host for activity on mount and withdraws on unmount', () => {

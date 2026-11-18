@@ -243,5 +243,6 @@
   "Asked {0} to change vendor.": "{0} wurde um einen Anbieterwechsel gebeten.",
   "The vendor change could not be sent.": "Der Anbieterwechsel konnte nicht gesendet werden.",
   "Build line: the coordinator will build the stories above this line if left to run": "Build-Linie: Der Koordinator baut die Stories oberhalb dieser Linie, wenn man ihn weiterlaufen lässt",
+  "Build line: the coordinator has no work set on this board": "Build-Linie: Der Koordinator hat auf diesem Board keine Arbeit angesetzt",
   "Ship line: the stories above this line have passed the release gate": "Auslieferungslinie: Die Stories oberhalb dieser Linie haben das Release-Gate bestanden"
 }
